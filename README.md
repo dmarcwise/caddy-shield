@@ -209,6 +209,14 @@ Status codes must be between 400 and 599. Header values and bodies support Caddy
 - `{shield.reason}`: `blocklist` or `unavailable`
 - Standard Caddy request placeholders such as `{http.request.method}`
 
+## Performance
+
+When tested on an Apple M2 Pro, IP lookups against one million distinct ranges took about `0.1 µs` for an allowed
+request. A blocked request takes about `0.25 µs` when checking two sources for attribution.
+
+Lookups allocate no memory per request. The module uses up to about 96 MB of RAM per million unique IP ranges (after the lists are loaded in the IPSet). It will
+usually use less because overlapping and adjacent ranges are combined.
+
 ## Refresh behavior
 
 Each source refreshes independently. Successful results are published atomically; a failed refresh keeps that

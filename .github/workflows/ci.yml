@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          cache-dependency-path: go.sum
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          unformatted=$(gofmt -l .)
+          if [[ -n "$unformatted" ]]; then
+            echo "The following files are not formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Check module files
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test with race detector
+        run: go test -race ./...
+
+      - name: Build Caddy with Shield
+        shell: bash
+        env:
+          XCADDY_VERSION: v0.4.5
+        run: |
+          caddy_version=$(go list -m -f '{{.Version}}' github.com/caddyserver/caddy/v2)
+          go run "github.com/caddyserver/xcaddy/cmd/xcaddy@${XCADDY_VERSION}" \
+            build "$caddy_version" \
+            --output "$RUNNER_TEMP/caddy" \
+            --with github.com/dmarcwise/caddy-shield=.
+
+          "$RUNNER_TEMP/caddy" list-modules | grep -Fxq shield
+          "$RUNNER_TEMP/caddy" list-modules | grep -Fxq http.handlers.shield

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/netip"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var benchmarkLookupResult bool
@@ -40,6 +42,18 @@ func BenchmarkIPLookup(b *testing.B) {
 				benchmarkContainsBlocked(b, policy, miss, false)
 			})
 		})
+	}
+}
+
+func BenchmarkDecisionMetric(b *testing.B) {
+	metrics, err := newShieldMetrics(prometheus.NewPedanticRegistry(), nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		metrics.recordDecision(decisionAllowNotListed)
 	}
 }
 

@@ -218,6 +218,17 @@ request. A blocked request takes about `0.25 µs` when checking two sources for 
 Lookups allocate no memory per request. The module uses up to about 96 MB of RAM per million unique IP ranges (after the lists are loaded in the IPSet). It will
 usually use less because overlapping and adjacent ranges are combined.
 
+## Metrics
+
+When Caddy's metrics endpoint is enabled, Shield exports:
+
+- `caddy_shield_decisions_total{decision,reason}`: increments once for every request Shield allows or blocks
+- `caddy_shield_source_blocks_total{source}`: increments for every source matching a blocked request
+
+The decision is `allow` or `block`. Its reason is one of `allowlist`, `not_listed`, `unavailable`, `static_deny`, or
+`source`. If a blocked address appears in multiple sources, the decision counter increments once and each matching
+source counter increments once.
+
 ## Refresh behavior
 
 Each source refreshes independently. Successful results are published atomically; a failed refresh keeps that

@@ -23,6 +23,7 @@ type App struct {
 	logger  *zap.Logger
 	static  *snapshot
 	manager *refreshManager
+	metrics *shieldMetrics
 }
 
 // CaddyModule returns the Caddy module information.
@@ -41,6 +42,11 @@ func (app *App) Provision(ctx caddy.Context) error {
 	if err := app.Validate(); err != nil {
 		return err
 	}
+	metrics, err := newShieldMetrics(ctx.GetMetricsRegistry(), app.Sources)
+	if err != nil {
+		return err
+	}
+	app.metrics = metrics
 
 	allowed, err := parseConfiguredPrefixes(app.Allow)
 	if err != nil {

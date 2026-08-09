@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 	"go4.org/netipx"
@@ -26,18 +28,20 @@ func TestServeHTTPDecisionMatrix(t *testing.T) {
 		failOpen   bool
 		wantNext   bool
 		wantStatus int
+		wantMetric decisionMetric
 	}{
-		{name: "static deny", clientIP: "192.0.2.1", deny: []string{"192.0.2.0/24"}, ready: true, failOpen: true, wantStatus: 403},
-		{name: "feed deny", clientIP: "192.0.2.1", feed: []string{"192.0.2.0/24"}, ready: true, failOpen: true, wantStatus: 403},
-		{name: "allow overrides all denies", clientIP: "192.0.2.1", allow: []string{"192.0.2.1"}, deny: []string{"192.0.2.0/24"}, feed: []string{"192.0.2.0/24"}, ready: true, failOpen: true, wantNext: true, wantStatus: 204},
-		{name: "miss", clientIP: "203.0.113.1", deny: []string{"192.0.2.0/24"}, ready: true, failOpen: true, wantNext: true, wantStatus: 204},
-		{name: "unavailable fail open", clientIP: "203.0.113.1", ready: false, failOpen: true, wantNext: true, wantStatus: 204},
-		{name: "unavailable fail closed", clientIP: "203.0.113.1", ready: false, failOpen: false, wantStatus: 403},
+		{name: "static deny", clientIP: "192.0.2.1", deny: []string{"192.0.2.0/24"}, ready: true, failOpen: true, wantStatus: 403, wantMetric: decisionBlockStaticDeny},
+		{name: "feed deny", clientIP: "192.0.2.1", feed: []string{"192.0.2.0/24"}, ready: true, failOpen: true, wantStatus: 403, wantMetric: decisionBlockSource},
+		{name: "allow overrides all denies", clientIP: "192.0.2.1", allow: []string{"192.0.2.1"}, deny: []string{"192.0.2.0/24"}, feed: []string{"192.0.2.0/24"}, ready: true, failOpen: true, wantNext: true, wantStatus: 204, wantMetric: decisionAllowAllowlist},
+		{name: "miss", clientIP: "203.0.113.1", deny: []string{"192.0.2.0/24"}, ready: true, failOpen: true, wantNext: true, wantStatus: 204, wantMetric: decisionAllowNotListed},
+		{name: "unavailable fail open", clientIP: "203.0.113.1", ready: false, failOpen: true, wantNext: true, wantStatus: 204, wantMetric: decisionAllowUnavailable},
+		{name: "unavailable fail closed", clientIP: "203.0.113.1", ready: false, failOpen: false, wantStatus: 403, wantMetric: decisionBlockUnavailable},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := newRequestTestHandler(t, tt.allow, tt.deny, tt.feed, tt.ready, tt.failOpen)
+			metricBefore := prometheusCounterValue(t, h.app.metrics.decisionCounts[tt.wantMetric])
 			recorder := httptest.NewRecorder()
 			nextCalled := false
 			err := h.ServeHTTP(recorder, requestWithClientIP(tt.clientIP), caddyhttp.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) error {
@@ -53,6 +57,9 @@ func TestServeHTTPDecisionMatrix(t *testing.T) {
 			}
 			if !tt.wantNext && recorder.Body.String() != "Request blocked\n" {
 				t.Errorf("body = %q, want default denial body", recorder.Body.String())
+			}
+			if got := prometheusCounterValue(t, h.app.metrics.decisionCounts[tt.wantMetric]); got != metricBefore+1 {
+				t.Errorf("decision metric = %v, want %v", got, metricBefore+1)
 			}
 		})
 	}
@@ -120,6 +127,12 @@ func TestFeedBlockReportsAllMatchingSources(t *testing.T) {
 		},
 		ready: true,
 	})
+	h.app.metrics = newRequestTestMetrics(t, "first", "second")
+	decisionBefore := prometheusCounterValue(t, h.app.metrics.decisionCounts[decisionBlockSource])
+	sourceBefore := map[string]float64{
+		"first":  prometheusCounterValue(t, h.app.metrics.sourceCounts["first"]),
+		"second": prometheusCounterValue(t, h.app.metrics.sourceCounts["second"]),
+	}
 	body := "blocked by {shield.sources}"
 	h.effectiveResponse.Body = &body
 	core, logs := observer.New(zap.DebugLevel)
@@ -138,6 +151,14 @@ func TestFeedBlockReportsAllMatchingSources(t *testing.T) {
 	entries := logs.All()
 	if len(entries) != 1 || !reflect.DeepEqual(entries[0].ContextMap()["sources"], []any{"first", "second"}) {
 		t.Fatalf("block log entries = %#v, want both sources", entries)
+	}
+	if got := prometheusCounterValue(t, h.app.metrics.decisionCounts[decisionBlockSource]); got != decisionBefore+1 {
+		t.Errorf("source decision metric = %v, want %v", got, decisionBefore+1)
+	}
+	for _, source := range []string{"first", "second"} {
+		if got := prometheusCounterValue(t, h.app.metrics.sourceCounts[source]); got != sourceBefore[source]+1 {
+			t.Errorf("source %q metric = %v, want %v", source, got, sourceBefore[source]+1)
+		}
 	}
 }
 
@@ -277,6 +298,7 @@ func newRequestTestHandler(t *testing.T, allow, deny, feed []string, ready, fail
 	}
 	app := &App{FailOpen: &failOpen}
 	app.setDefaults()
+	app.metrics = newRequestTestMetrics(t, "test")
 	app.manager = new(refreshManager)
 	app.manager.current.Store(&feedSnapshot{
 		blocked: feedSet,
@@ -290,6 +312,28 @@ func newRequestTestHandler(t *testing.T, allow, deny, feed []string, ready, fail
 		effectiveResponse: app.Response,
 		effectiveFailOpen: failOpen,
 	}
+}
+
+func newRequestTestMetrics(t *testing.T, sources ...string) *shieldMetrics {
+	t.Helper()
+	configured := make([]Source, len(sources))
+	for i, source := range sources {
+		configured[i].Name = source
+	}
+	metrics, err := newShieldMetrics(prometheus.NewPedanticRegistry(), configured)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return metrics
+}
+
+func prometheusCounterValue(t *testing.T, counter prometheus.Counter) float64 {
+	t.Helper()
+	metric := new(dto.Metric)
+	if err := counter.Write(metric); err != nil {
+		t.Fatal(err)
+	}
+	return metric.GetCounter().GetValue()
 }
 
 func requestWithClientIP(clientIP string) *http.Request {

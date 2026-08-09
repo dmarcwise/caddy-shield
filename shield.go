@@ -98,9 +98,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	}
 
 	if h.static != nil && h.static.containsAllowed(clientIP) {
+		h.recordDecision(decisionAllowAllowlist)
 		return next.ServeHTTP(w, r)
 	}
 	if h.static != nil && h.static.containsBlocked(clientIP) {
+		h.recordDecision(decisionBlockStaticDeny)
 		return h.writeBlockedResponse(w, r, clientIP, "blocklist", nil)
 	}
 
@@ -109,12 +111,29 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		feeds = h.app.manager.Snapshot()
 	}
 	if feeds != nil && feeds.blocked.Contains(clientIP) {
-		return h.writeBlockedResponse(w, r, clientIP, "blocklist", feeds.matchingSources(clientIP))
+		sources := feeds.matchingSources(clientIP)
+		h.recordDecision(decisionBlockSource)
+		if h.app != nil {
+			h.app.metrics.recordSourceBlocks(sources)
+		}
+		return h.writeBlockedResponse(w, r, clientIP, "blocklist", sources)
 	}
 	if (feeds == nil || !feeds.ready) && !h.isFailOpen() {
+		h.recordDecision(decisionBlockUnavailable)
 		return h.writeBlockedResponse(w, r, clientIP, "unavailable", nil)
 	}
+	if feeds == nil || !feeds.ready {
+		h.recordDecision(decisionAllowUnavailable)
+	} else {
+		h.recordDecision(decisionAllowNotListed)
+	}
 	return next.ServeHTTP(w, r)
+}
+
+func (h *Handler) recordDecision(metric decisionMetric) {
+	if h.app != nil {
+		h.app.metrics.recordDecision(metric)
+	}
 }
 
 func (h *Handler) isFailOpen() bool {

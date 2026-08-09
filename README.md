@@ -207,6 +207,7 @@ Status codes must be between 400 and 599. Header values and bodies support Caddy
 
 - `{shield.client_ip}` or `{client_ip}`: the resolved address
 - `{shield.reason}`: `blocklist` or `unavailable`
+- `{shield.sources}`: comma-separated names of every matching feed; empty for static denies and unavailable feeds
 - Standard Caddy request placeholders such as `{http.request.method}`
 
 ## Performance
@@ -235,7 +236,7 @@ For example:
 ```
 2026/08/09 12:44:16.114	INFO	shield	blocklist refreshed	{"source": "playground", "status": 200, "duration": 0.001493625, "accepted": 1, "invalid": 0, "ranges": 1}
 2026/08/09 12:44:18.300	DEBUG	shield	blocklist unchanged	{"source": "playground", "status": 304, "duration": 0.003635333}
-2026/08/09 12:44:22.481	DEBUG	http.handlers.shield	request blocked	{"client_ip": "127.0.0.1", "reason": "blocklist", "host": "127.0.0.1:8080", "uri": "/", "status": 403}
+2026/08/09 12:44:22.481	DEBUG	http.handlers.shield	request blocked	{"client_ip": "127.0.0.1", "reason": "blocklist", "sources": ["playground"], "host": "127.0.0.1:8080", "uri": "/", "status": 403}
 2026/08/09 12:44:22.481	INFO	http.log.access	handled request	{"request": {"remote_ip": "127.0.0.1", "remote_port": "63228", "client_ip": "127.0.0.1", "proto": "HTTP/1.1", "method": "GET", "host": "127.0.0.1:8080", "uri": "/", "headers": {"Accept": ["*/*"], "User-Agent": ["curl/8.7.1"]}}, "bytes_read": 0, "user_id": "", "duration": 0.000199667, "size": 19, "status": 403, "resp_headers": {"Server": ["Caddy"], "Content-Type": ["text/plain; charset=utf-8"]}}
 ```
 

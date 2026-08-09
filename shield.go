@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/netip"
+	"strings"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
@@ -100,7 +101,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		return next.ServeHTTP(w, r)
 	}
 	if h.static != nil && h.static.containsBlocked(clientIP) {
-		return h.writeBlockedResponse(w, r, clientIP, "blocklist")
+		return h.writeBlockedResponse(w, r, clientIP, "blocklist", nil)
 	}
 
 	var feeds *feedSnapshot
@@ -108,10 +109,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		feeds = h.app.manager.Snapshot()
 	}
 	if feeds != nil && feeds.blocked.Contains(clientIP) {
-		return h.writeBlockedResponse(w, r, clientIP, "blocklist")
+		return h.writeBlockedResponse(w, r, clientIP, "blocklist", feeds.matchingSources(clientIP))
 	}
 	if (feeds == nil || !feeds.ready) && !h.isFailOpen() {
-		return h.writeBlockedResponse(w, r, clientIP, "unavailable")
+		return h.writeBlockedResponse(w, r, clientIP, "unavailable", nil)
 	}
 	return next.ServeHTTP(w, r)
 }
@@ -137,7 +138,7 @@ func clientIPFromRequest(r *http.Request) (netip.Addr, error) {
 	return netip.Addr{}, fmt.Errorf("parse client IP %q", address)
 }
 
-func (h *Handler) writeBlockedResponse(w http.ResponseWriter, r *http.Request, clientIP netip.Addr, reason string) error {
+func (h *Handler) writeBlockedResponse(w http.ResponseWriter, r *http.Request, clientIP netip.Addr, reason string, sources []string) error {
 	repl, _ := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if repl == nil {
 		repl = caddy.NewReplacer()
@@ -149,6 +150,7 @@ func (h *Handler) writeBlockedResponse(w http.ResponseWriter, r *http.Request, c
 	repl.Set("client_ip", ipText)
 	repl.Set("shield.client_ip", ipText)
 	repl.Set("shield.reason", reason)
+	repl.Set("shield.sources", strings.Join(sources, ","))
 
 	response := h.effectiveResponse
 	if h.app == nil {
@@ -174,6 +176,7 @@ func (h *Handler) writeBlockedResponse(w http.ResponseWriter, r *http.Request, c
 		h.logger.Debug("request blocked",
 			zap.String("client_ip", ipText),
 			zap.String("reason", reason),
+			zap.Strings("sources", sources),
 			zap.String("host", r.Host),
 			zap.String("uri", r.URL.RequestURI()),
 			zap.Int("status", statusCode),

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"net/http"
+	"net/netip"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,7 +37,27 @@ type refreshManager struct {
 
 type feedSnapshot struct {
 	blocked *netipx.IPSet
+	sources []feedSourceSnapshot
 	ready   bool
+}
+
+type feedSourceSnapshot struct {
+	name string
+	set  *netipx.IPSet
+}
+
+func (s *feedSnapshot) matchingSources(addr netip.Addr) []string {
+	if s == nil || !addr.IsValid() {
+		return nil
+	}
+	addr = addr.Unmap().WithZone("")
+	matches := make([]string, 0, len(s.sources))
+	for _, source := range s.sources {
+		if source.set.Contains(addr) {
+			matches = append(matches, source.name)
+		}
+	}
+	return matches
 }
 
 func newRefreshManager(parent context.Context, app *App) (*refreshManager, error) {
@@ -171,9 +192,11 @@ func (m *refreshManager) publish(source *sourceRuntime, result fetchResult, dura
 
 	source.set = result.set
 	var builder netipx.IPSetBuilder
+	sources := make([]feedSourceSnapshot, 0, len(m.sources))
 	for _, configured := range m.sources {
 		if configured.set != nil {
 			builder.AddSet(configured.set)
+			sources = append(sources, feedSourceSnapshot{name: configured.name, set: configured.set})
 		}
 	}
 	blocked, err := builder.IPSet()
@@ -181,7 +204,7 @@ func (m *refreshManager) publish(source *sourceRuntime, result fetchResult, dura
 		m.logger.Error("failed to build combined blocklist snapshot", zap.Error(err))
 		return
 	}
-	m.current.Store(&feedSnapshot{blocked: blocked, ready: true})
+	m.current.Store(&feedSnapshot{blocked: blocked, sources: sources, ready: true})
 	m.logger.Info("blocklist refreshed",
 		zap.String("source", source.name),
 		zap.Int("status", result.statusCode),

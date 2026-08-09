@@ -6,10 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"reflect"
 	"testing"
 
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+	"go4.org/netipx"
 )
 
 func TestServeHTTPDecisionMatrix(t *testing.T) {
@@ -89,6 +92,52 @@ func TestBlockedResponseUsesSiteOverrides(t *testing.T) {
 		recorder.Header().Get("X-Global") != "kept" || recorder.Header().Get("X-Blocked-IP") != "192.0.2.42" ||
 		recorder.Body.String() != "blocked 192.0.2.42 via GET (blocklist)" {
 		t.Errorf("response = status:%d headers:%v body:%q", recorder.Code, recorder.Header(), recorder.Body.String())
+	}
+}
+
+func TestFeedBlockReportsAllMatchingSources(t *testing.T) {
+	h := newRequestTestHandler(t, nil, nil, nil, true, true)
+	first, err := buildIPSet([]netip.Prefix{netip.MustParsePrefix("192.0.2.0/24")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := buildIPSet([]netip.Prefix{netip.MustParsePrefix("192.0.2.42/32")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var builder netipx.IPSetBuilder
+	builder.AddSet(first)
+	builder.AddSet(second)
+	merged, err := builder.IPSet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.app.manager.current.Store(&feedSnapshot{
+		blocked: merged,
+		sources: []feedSourceSnapshot{
+			{name: "first", set: first},
+			{name: "second", set: second},
+		},
+		ready: true,
+	})
+	body := "blocked by {shield.sources}"
+	h.effectiveResponse.Body = &body
+	core, logs := observer.New(zap.DebugLevel)
+	h.logger = zap.New(core)
+
+	recorder := httptest.NewRecorder()
+	if err := h.ServeHTTP(recorder, requestWithClientIP("192.0.2.42"), caddyhttp.HandlerFunc(func(http.ResponseWriter, *http.Request) error {
+		t.Fatal("next handler called for blocked client")
+		return nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.Body.String() != "blocked by first,second" {
+		t.Errorf("body = %q, want attributed sources", recorder.Body.String())
+	}
+	entries := logs.All()
+	if len(entries) != 1 || !reflect.DeepEqual(entries[0].ContextMap()["sources"], []any{"first", "second"}) {
+		t.Fatalf("block log entries = %#v, want both sources", entries)
 	}
 }
 
@@ -184,6 +233,9 @@ func TestGlobalAppToHandlerFlow(t *testing.T) {
 	}
 	defer app.Stop()
 	waitForAddress(t, app.manager, "192.0.2.42")
+	if sources := app.manager.Snapshot().matchingSources(netip.MustParseAddr("192.0.2.42")); !reflect.DeepEqual(sources, []string{"test"}) {
+		t.Fatalf("matching sources = %v, want [test]", sources)
+	}
 
 	handler := &Handler{app: app}
 	if err := handler.configureFromApp(app); err != nil {
@@ -226,7 +278,11 @@ func newRequestTestHandler(t *testing.T, allow, deny, feed []string, ready, fail
 	app := &App{FailOpen: &failOpen}
 	app.setDefaults()
 	app.manager = new(refreshManager)
-	app.manager.current.Store(&feedSnapshot{blocked: feedSet, ready: ready})
+	app.manager.current.Store(&feedSnapshot{
+		blocked: feedSet,
+		sources: []feedSourceSnapshot{{name: "test", set: feedSet}},
+		ready:   ready,
+	})
 	return &Handler{
 		FailOpen:          &failOpen,
 		app:               app,

@@ -30,8 +30,6 @@ func TestServeHTTPDecisionMatrix(t *testing.T) {
 		{name: "miss", clientIP: "203.0.113.1", deny: []string{"192.0.2.0/24"}, ready: true, failOpen: true, wantNext: true, wantStatus: 204},
 		{name: "unavailable fail open", clientIP: "203.0.113.1", ready: false, failOpen: true, wantNext: true, wantStatus: 204},
 		{name: "unavailable fail closed", clientIP: "203.0.113.1", ready: false, failOpen: false, wantStatus: 403},
-		{name: "invalid IP fail open", clientIP: "invalid", ready: true, failOpen: true, wantNext: true, wantStatus: 204},
-		{name: "invalid IP fail closed", clientIP: "invalid", ready: true, failOpen: false, wantStatus: 403},
 	}
 
 	for _, tt := range tests {
@@ -130,6 +128,18 @@ func TestClientIPTrustBoundary(t *testing.T) {
 		got, err := clientIPFromRequest(req)
 		if err != nil || got != netip.MustParseAddr("192.0.2.10") {
 			t.Fatalf("clientIPFromRequest() = %s, %v", got, err)
+		}
+	})
+
+	t.Run("invalid resolved IP is an internal error", func(t *testing.T) {
+		h := newRequestTestHandler(t, nil, nil, nil, true, true)
+		err := h.ServeHTTP(httptest.NewRecorder(), requestWithClientIP("invalid"), caddyhttp.HandlerFunc(func(http.ResponseWriter, *http.Request) error {
+			t.Fatal("next handler called")
+			return nil
+		}))
+		handlerErr, ok := err.(caddyhttp.HandlerError)
+		if !ok || handlerErr.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("ServeHTTP() error = %#v, want HTTP 500 HandlerError", err)
 		}
 	})
 }

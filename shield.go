@@ -93,10 +93,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 
 	clientIP, err := clientIPFromRequest(r)
 	if err != nil {
-		if h.isFailOpen() {
-			return next.ServeHTTP(w, r)
-		}
-		return h.writeBlockedResponse(w, r, netip.Addr{}, "client_ip_error")
+		return caddyhttp.Error(http.StatusInternalServerError, fmt.Errorf("resolving trusted client IP: %w", err))
 	}
 
 	if h.static != nil && h.static.containsAllowed(clientIP) {

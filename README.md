@@ -178,7 +178,7 @@ Options in the global `shield` block:
 | `max_entries <count>`         | `2000000` | Maximum accepted entries per source.                                                    |
 | `allow <IP/CIDR...>`          | none      | Adds static allow entries.                                                              |
 | `deny <IP/CIDR...>`           | none      | Adds static deny entries.                                                               |
-| `fail_open <bool>`            | `true`    | Allows requests when no feed snapshot is available or the client IP cannot be resolved. |
+| `fail_open <bool>`            | `true`    | Allows requests when no feed snapshot is available.                                    |
 | `response`                    | HTTP 403  | Configures the blocked status, headers, and body.                                       |
 
 At least one global source or deny entry is required. Site-level `shield` blocks accept `allow`, `deny`, `fail_open`,
@@ -206,7 +206,7 @@ response {
 Status codes must be between 400 and 599. Header values and bodies support Caddy placeholders, including:
 
 - `{shield.client_ip}` or `{client_ip}`: the resolved address
-- `{shield.reason}`: `blocklist`, `unavailable`, or `client_ip_error`
+- `{shield.reason}`: `blocklist` or `unavailable`
 - Standard Caddy request placeholders such as `{http.request.method}`
 
 ## Refresh behavior

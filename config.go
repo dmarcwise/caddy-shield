@@ -18,7 +18,7 @@ const (
 	defaultMaxSize         = int64(32 * 1024 * 1024)
 	defaultMaxEntries      = 2_000_000
 	defaultStatusCode      = http.StatusForbidden
-	defaultResponseBody    = "Access denied by Caddy Shield\n"
+	defaultResponseBody    = "Request blocked\n"
 )
 
 // Source describes a blocklist feed. A source may reference a built-in preset

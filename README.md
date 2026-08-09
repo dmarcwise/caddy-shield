@@ -182,7 +182,16 @@ Options in the global `shield` block:
 At least one global source or deny entry is required. Site-level `shield` blocks accept `allow`, `deny`, `fail_open`,
 and `response`; sources and download settings remain global.
 
-The `response` block accepts:
+The default blocked response is:
+
+```http
+HTTP/1.1 403 Forbidden
+Content-Type: text/plain; charset=utf-8
+
+Request blocked
+```
+
+Customize the response with the `response` block:
 
 ```caddyfile
 response {

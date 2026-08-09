@@ -50,6 +50,9 @@ func TestServeHTTPDecisionMatrix(t *testing.T) {
 			if nextCalled != tt.wantNext || recorder.Code != tt.wantStatus {
 				t.Errorf("next=%t status=%d, want next=%t status=%d", nextCalled, recorder.Code, tt.wantNext, tt.wantStatus)
 			}
+			if !tt.wantNext && recorder.Body.String() != "Request blocked\n" {
+				t.Errorf("body = %q, want default denial body", recorder.Body.String())
+			}
 		})
 	}
 }

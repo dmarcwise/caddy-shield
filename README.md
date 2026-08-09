@@ -31,7 +31,6 @@ xcaddy build --with github.com/dmarcwise/caddy-shield=.
 	shield {
 		source ipsum_3
 		source firehol_level1
-		source borestad_abuseipdb_7d
 
 		refresh_interval 1h
 		timeout 30s
@@ -105,13 +104,15 @@ The available presets are:
 | `ipsum_1` | [IPsum](https://github.com/stamparm/ipsum), present on at least 1 source list                                         |
 | `ipsum_2` | [IPsum](https://github.com/stamparm/ipsum), present on at least 2 source lists                                        |
 | `ipsum_3` | [IPsum](https://github.com/stamparm/ipsum), present on at least 3 source lists                                        |
-| `firehol_level1` | [FireHOL level 1](https://iplists.firehol.org/?ipset=firehol_level1), safe to block, lowest false-positive risk       |
+| `firehol_level1` | [FireHOL level 1](https://iplists.firehol.org/?ipset=firehol_level1), designed for the lowest false-positive risk    |
 | `firehol_level2` | [FireHOL level 2](https://iplists.firehol.org/?ipset=firehol_level2), recent attackers from roughly the last 48 hours |
 | `firehol_level3` | [FireHOL level 3](https://iplists.firehol.org/?ipset=firehol_level3), attacks, spyware, and malware                   |
 | `firehol_level4` | [FireHOL level 4](https://iplists.firehol.org/?ipset=firehol_level4), wider coverage with greater false-positive risk |
 | `borestad_abuseipdb_1d` | [Borestad AbuseIPDB](https://github.com/borestad/blocklist-abuseipdb), score ~100 reported within 1 day               |
 | `borestad_abuseipdb_7d` | [Borestad AbuseIPDB](https://github.com/borestad/blocklist-abuseipdb), score ~100 reported within 7 days              |
 | `borestad_abuseipdb_30d` | [Borestad AbuseIPDB](https://github.com/borestad/blocklist-abuseipdb), score ~100 reported within 30 days             |
+
+Note that AbuseIPDB blocklists are based on user reports and [may block](https://www.reddit.com/r/ClaudeAI/comments/1v4dsws/one_of_anthropics_published_crawler_ips_is/) search engines or AI search bots.
 
 Preset URLs cannot be overridden. To use a mirror or different URL, configure a custom source with a different name.
 
@@ -133,15 +134,16 @@ first whitespace-delimited field are ignored.
 
 ## Recommended starting point
 
-For a conservative initial configuration with low risk of false positives, enable the following lists:
+For a low risk initial configuration, start with:
 
 ```caddyfile
 shield {
 	source ipsum_3
 	source firehol_level1
-	source borestad_abuseipdb_7d
 }
 ```
+
+Note that no blocklist is guaranteed to be free of false positives. Make sure you monitor the decision logs after rollout.
 
 ## Client IPs and proxies
 

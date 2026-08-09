@@ -2,14 +2,13 @@
 
 A Caddy module to block requests from clients found in IP blocklists. 
 
-Features:
-- Multiple feeds supported, with built-in IPsum, FireHOL, and AbuseIPDB presets
-- Custom HTTP and HTTPS blocklist sources
-- Automatic background feed refreshes, asynchronous and independent, with last-known-good retention, conditional requests, retry backoff, and jitter
-- Static allow and deny entries, with allow entries taking precedence
-- Configurable per-site responses for blocked requests
-- Efficient IPv4 and IPv6 request lookups using efficient immutable IP sets (`netipx.IPSet`)
-- Structured logging for list refreshes and blocked requests
+- ✅ Multiple feeds supported, with built-in IPsum, FireHOL, and AbuseIPDB presets
+- ✅ Custom HTTP and HTTPS blocklist sources
+- ✅ Automatic background feed refreshes, asynchronous and independent, with last-known-good retention, conditional requests, retry backoff, and jitter
+- ✅ Static allow and deny entries, with allow entries taking precedence
+- ✅ Configurable per-site responses for blocked requests
+- ✅ Efficient IPv4 and IPv6 request lookups using efficient immutable IP sets (`netipx.IPSet`)
+- ✅ Structured logging for list refreshes and blocked requests
 
 ## Build
 

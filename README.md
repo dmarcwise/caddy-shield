@@ -199,6 +199,42 @@ source's last-known-good entries while the other sources continue normally. Cond
 Downloads begin asynchronously when Caddy starts. Until the first source succeeds, requests not covered by static
 allow or deny entries follow `fail_open`.
 
+## Logging
+
+Blocklist refreshes are logged at `debug`, `info`, or `warning` level. Block decisions use `debug` level.
+
+For example:
+
+```
+2026/08/09 12:44:16.114	INFO	shield	blocklist refreshed	{"source": "playground", "status": 200, "duration": 0.001493625, "accepted": 1, "invalid": 0, "ranges": 1}
+2026/08/09 12:44:18.300	DEBUG	shield	blocklist unchanged	{"source": "playground", "status": 304, "duration": 0.003635333}
+2026/08/09 12:44:22.481	DEBUG	http.handlers.shield	request blocked	{"client_ip": "127.0.0.1", "reason": "blocklist", "host": "127.0.0.1:8080", "uri": "/", "status": 403}
+2026/08/09 12:44:22.481	INFO	http.log.access	handled request	{"request": {"remote_ip": "127.0.0.1", "remote_port": "63228", "client_ip": "127.0.0.1", "proto": "HTTP/1.1", "method": "GET", "host": "127.0.0.1:8080", "uri": "/", "headers": {"Accept": ["*/*"], "User-Agent": ["curl/8.7.1"]}}, "bytes_read": 0, "user_id": "", "duration": 0.000199667, "size": 19, "status": 403, "resp_headers": {"Server": ["Caddy"], "Content-Type": ["text/plain; charset=utf-8"]}}
+```
+
+To enable debug logging for Caddy Shield without enabling debug logging for all of Caddy, use:
+
+```caddyfile
+{
+    # Exclude Shield events from the default logger
+	log default {
+		exclude shield http.handlers.shield
+	}
+
+    # Create a separate logger for Shield events
+	log shield {
+		level DEBUG
+		include shield http.handlers.shield
+	}
+
+	shield {
+		# ...
+	}
+}
+```
+
+Note that standard non-blocked request logging is separate and is enabled with the `log` directive inside a site block.
+
 ## Development
 
 ```sh
@@ -206,3 +242,5 @@ go test ./...
 go test -race ./...
 go test -run '^$' -bench '^BenchmarkIPLookup$' -benchmem ./...
 ```
+
+For a manual end-to-end walkthrough, see the [local playground](playground/README.md).

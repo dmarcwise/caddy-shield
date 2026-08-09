@@ -1,0 +1,36 @@
+{
+    # Exclude Shield events from the default logger
+    log default {
+        exclude shield http.handlers.shield
+    }
+
+    # Create a separate logger for Shield events
+    log shield {
+        level DEBUG
+        include shield http.handlers.shield
+    }
+
+    # Configure Shield
+    shield {
+        source playground {
+            url http://127.0.0.1:8099/blocklist.txt
+            refresh_interval 2s
+        }
+
+        response {
+            status 403
+            header Content-Type "text/plain; charset=utf-8"
+            body "Blocked by Shield\n"
+        }
+    }
+}
+
+:8080 {
+    # Enable request logging
+    log
+
+    # Enable Shield for this site
+    shield
+
+    respond "Request allowed\n"
+}
